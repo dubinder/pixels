@@ -8,8 +8,14 @@
 #include <fcntl.h>
 #include <iostream>
 
-int g_width = 640;
-int g_height = 480;
+#include <Windows.h>
+#include <windowsx.h>
+#include <d3d11.h>
+
+
+
+const int g_width = 640;
+const int g_height = 480;
 int g_windowID = 0;
 std::string g_fileName;
 void help()
