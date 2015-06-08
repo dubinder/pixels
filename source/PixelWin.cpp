@@ -13,6 +13,23 @@ ID3D11Device *g_dev;                      // the pointer to our Direct3D device 
 ID3D11DeviceContext *g_devcon;            // the pointer to our Direct3D device context
 ID3D11RenderTargetView *g_backbuffer;     // the pointer to the back buffer
 
+struct Color
+{
+  float red;
+  float green;
+  float blue;
+  float alpha;
+};
+
+struct Vertex
+{
+  float x;
+  float y;
+  float z;
+  Color vColor;
+};
+
+Vertex firstVertex = { 0, 0, 0, firstVertex.vColor = { 1.0f, 0.0, 0.0, 1.0 } };
 // sets up and initializes Direct3D
 void InitD3D(HWND hWnd)
 {
@@ -164,13 +181,13 @@ int WINAPI WinMain(HINSTANCE hInstance,
 
       // check to see if it's time to quit
       if (msg.message == WM_QUIT)
+      {
         break;
+      }
     }
     else
     {
       // Run game code here
-      // ...
-      // ...
       RenderFrame();
     }
   }
@@ -185,12 +202,12 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
   switch (message)
   {
     // this message is read when the window is closed
-  case WM_DESTROY:
-  {
-    // close the application entirely
-    PostQuitMessage(0);
-    return 0;
-  } break;
+    case WM_DESTROY:
+      // close the application entirely
+      PostQuitMessage(0);
+      return 0;
+    default:
+      break;
   }
 
   // Handle any messages the switch statement didn't
