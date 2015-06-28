@@ -1,6 +1,7 @@
 // include the basic windows header file
 #include <windows.h>
 #include <windowsx.h>
+#include <fstream>
 #include <d3d11.h>
 
 #pragma comment (lib, "d3d11.lib")
@@ -8,10 +9,14 @@
 // global declarations
 const int g_width = 640;                  // Screen Width
 const int g_height = 480;                 // Screen Height
-IDXGISwapChain *g_swapchain;              // the pointer to the swap chain interface
-ID3D11Device *g_dev;                      // the pointer to our Direct3D device interface
-ID3D11DeviceContext *g_devcon;            // the pointer to our Direct3D device context
-ID3D11RenderTargetView *g_backbuffer;     // the pointer to the back buffer
+IDXGISwapChain *g_pSwapchain;              // the pointer to the swap chain interface
+ID3D11Device *g_pDev;                      // the pointer to our Direct3D device interface
+ID3D11DeviceContext *g_pDevcon;            // the pointer to our Direct3D device context
+ID3D11RenderTargetView *g_pBackbuffer;     // the pointer to the back buffer
+ID3D11PixelShader *g_pPS;                 // the pointer to the pixel shader
+ID3D11VertexShader *g_pVS;                // the pointer to the vertex shader
+ID3D11Buffer *g_pVBuffer;                 // the pointer to the vertex buffer
+ID3D11InputLayout *g_pILayout;            // the pointer to the input Layout
 
 struct Color
 {
@@ -30,6 +35,106 @@ struct Vertex
 };
 
 Vertex firstVertex = { 0, 0, 0, firstVertex.vColor = { 1.0f, 0.0, 0.0, 1.0 } };
+
+
+
+void InitGraphics()
+{
+  // create a triangle using the VERTEX struct
+
+  Vertex Triangle[] =
+  {
+    { 0.0f, 0.5f, 0.0f, { 1.0f, 0.0f, 0.0f, 1.0f } },
+    { 0.45f, -0.5, 0.0f, { 0.0f, 1.0f, 0.0f, 1.0f } },
+    { -0.45f, -0.5f, 0.0f, { 0.0f, 0.0f, 1.0f, 1.0f } }
+  };
+
+  // create the vertex buffer
+  D3D11_BUFFER_DESC bd;
+  ZeroMemory(&bd, sizeof(bd));
+
+  bd.Usage = D3D11_USAGE_DYNAMIC;                // write access access by CPU and GPU
+  bd.ByteWidth = sizeof(Vertex) * 3;             // size is the VERTEX struct * 3
+  bd.BindFlags = D3D11_BIND_VERTEX_BUFFER;       // use as a vertex buffer
+  bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;    // allow CPU to write in buffer
+
+  g_pDev->CreateBuffer(&bd, NULL, &g_pVBuffer);       // create the buffer
+
+
+  // copy the vertices into the buffer
+  D3D11_MAPPED_SUBRESOURCE ms;
+  g_pDevcon->Map(g_pVBuffer, NULL, D3D11_MAP_WRITE_DISCARD, NULL, &ms);    // map the buffer
+  memcpy(ms.pData, Triangle, sizeof(Triangle));                 // copy the data
+  g_pDevcon->Unmap(g_pVBuffer, NULL);                                      // unmap the buffer
+}
+
+char * ReadData(const char* path)
+{
+  std::ifstream shader;
+  size_t shaderSize;
+  char * shaderData = { 0 };
+
+  shader.open(path, std::ios::in | std::ios::binary);
+  if (shader.is_open())
+  {
+    shader.seekg(0, std::ios::end);
+    shaderSize = static_cast<size_t>(shader.tellg());
+    shaderData = new char[shaderSize];
+    shader.seekg(0, std::ios::beg);
+    shader.read(shaderData, shaderSize);
+    shader.close();
+  }
+  return shaderData;
+}
+
+size_t ShaderSize(const char* path)
+{
+  std::ifstream shader;
+  size_t shaderSize;
+
+  shader.open(path, std::ios::in | std::ios::binary);
+  if (shader.is_open())
+  {
+    shader.seekg(0, std::ios::end);
+    shaderSize = static_cast<size_t>(shader.tellg());
+    shader.close();
+  }
+  return shaderSize;
+}
+void InitPipeline()
+{
+  auto shaderByteCode = ReadData("E:/bit.butcket/pixels/pixels/Debug/VertexShader.cso");
+  auto vShaderSize = ShaderSize("E:/bit.butcket/pixels/pixels/Debug/VertexShader.cso");
+
+  size_t test = sizeof(shaderByteCode);
+  HRESULT result = g_pDev->CreateVertexShader(
+    shaderByteCode,
+    vShaderSize,
+    nullptr,
+    &g_pVS
+    );
+  shaderByteCode = ReadData("E:/bit.butcket/pixels/pixels/Debug/PixelShader.cso");
+  auto pShaderSize = ShaderSize("E:/bit.butcket/pixels/pixels/Debug/PixelShader.cso");
+  result = g_pDev->CreatePixelShader(
+    shaderByteCode,
+    pShaderSize,
+    nullptr,
+    &g_pPS
+    );
+
+  g_pDevcon->VSSetShader(g_pVS, 0, 0);
+  g_pDevcon->PSSetShader(g_pPS, 0, 0);
+
+  // create the input layout object
+  const D3D11_INPUT_ELEMENT_DESC ied[] =
+  {
+    { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+    { "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+  };
+
+  result = g_pDev->CreateInputLayout(ied, ARRAYSIZE(ied), g_pVS, vShaderSize, &g_pILayout);
+  g_pDevcon->IASetInputLayout(g_pILayout);
+}
 // sets up and initializes Direct3D
 void InitD3D(HWND hWnd)
 {
@@ -50,7 +155,7 @@ void InitD3D(HWND hWnd)
   scd.Windowed = TRUE;                                // Windowed/full-screen mode
   scd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // allow full-screen switching
 
-  D3D11CreateDeviceAndSwapChain(NULL,
+  int HRESULT = D3D11CreateDeviceAndSwapChain(NULL,
     D3D_DRIVER_TYPE_HARDWARE,
     NULL,
     NULL,
@@ -58,21 +163,21 @@ void InitD3D(HWND hWnd)
     NULL,
     D3D11_SDK_VERSION,
     &scd,
-    &g_swapchain,
-    &g_dev,
+    &g_pSwapchain,
+    &g_pDev,
     NULL,
-    &g_devcon);
+    &g_pDevcon);
 
   // get the address of the back buffer
   ID3D11Texture2D *pBackBuffer;
-  g_swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
+  g_pSwapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
 
   // use the back buffer address to create the render target
-  g_dev->CreateRenderTargetView(pBackBuffer, NULL, &g_backbuffer);
+  g_pDev->CreateRenderTargetView(pBackBuffer, NULL, &g_pBackbuffer);
   pBackBuffer->Release();
 
   // set the render target as the back buffer
-  g_devcon->OMSetRenderTargets(1, &g_backbuffer, NULL);
+  g_pDevcon->OMSetRenderTargets(1, &g_pBackbuffer, NULL);
 
   D3D11_VIEWPORT viewport;
   ZeroMemory(&viewport, sizeof(D3D11_VIEWPORT));
@@ -82,29 +187,48 @@ void InitD3D(HWND hWnd)
   viewport.Width = g_width;
   viewport.Height = g_height;
 
-  g_devcon->RSSetViewports(1, &viewport);
+  g_pDevcon->RSSetViewports(1, &viewport);
+
+  InitPipeline();
+  InitGraphics();
 }
+
+
+
 
 // closes Direct3D and releases memory
 void CleanD3D()
 {
-  g_swapchain->SetFullscreenState(FALSE, NULL);    // switch to windowed mode
-  g_swapchain->Release();
-  g_backbuffer->Release();
-  g_dev->Release();
-  g_devcon->Release();
+  g_pSwapchain->SetFullscreenState(FALSE, NULL);    // switch to windowed mode
+  
+  g_pVS->Release();
+  g_pPS->Release();
+  g_pSwapchain->Release();
+  g_pBackbuffer->Release();
+  g_pDev->Release();
+  g_pDevcon->Release();
 }
 
 void RenderFrame(void)
 {
   // clear the back buffer to a deep blue
   float color[4] = { 0.0f, 0.2f, 0.4f, 1.0f };
-  g_devcon->ClearRenderTargetView(g_backbuffer, color);
+  g_pDevcon->ClearRenderTargetView(g_pBackbuffer, color);
 
   // do 3D rendering on the back buffer here
+  // select which vertex buffer to display
+  UINT stride = sizeof(Vertex);
+  UINT offset = 0;
+  g_pDevcon->IASetVertexBuffers(0, 1, &g_pVBuffer, &stride, &offset);
+
+  // select which primtive type we are using
+  g_pDevcon->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+  // draw the vertex buffer to the back buffer
+  g_pDevcon->Draw(3, 0);
 
   // switch the back buffer and the front buffer
-  g_swapchain->Present(0, 0);
+  g_pSwapchain->Present(0, 0);
 }
 // the WindowProc function prototype
 LRESULT CALLBACK WindowProc(HWND hWnd,
